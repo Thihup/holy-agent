@@ -6,22 +6,23 @@ import java.lang.constant.*;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.reflect.Modifier;
 import java.util.*;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 class Patches {
+    private static final ClassDesc PREDICATE_DESC = Predicate.class.describeConstable().orElseThrow();
 
-    public static final ClassDesc LIST_CLASS = List.class.describeConstable().orElseThrow();
-    public static final DirectMethodHandleDesc METAFACTORY = ConstantDescs.ofCallsiteBootstrap(
+    private static final DirectMethodHandleDesc METAFACTORY = ConstantDescs.ofCallsiteBootstrap(
             LambdaMetafactory.class.describeConstable().orElseThrow(), "metafactory",
             ConstantDescs.CD_CallSite,
-            ConstantDescs.CD_MethodHandles_Lookup, ConstantDescs.CD_String, ConstantDescs.CD_MethodType,
             ConstantDescs.CD_MethodType, ConstantDescs.CD_MethodHandle, ConstantDescs.CD_MethodType);
-    public static final DynamicCallSiteDesc STRING_STARTS_WITH_PREDICATE = DynamicCallSiteDesc.of(METAFACTORY, "test", MethodTypeDesc.of(Predicate.class.describeConstable().orElseThrow(), ConstantDescs.CD_String),
+    private static final MethodTypeDesc METHOD_TYPE_PREDICATE = MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String);
+    private static final DirectMethodHandleDesc STRING_STARTS_WITH = MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.VIRTUAL,
+        ConstantDescs.CD_String, "startsWith", METHOD_TYPE_PREDICATE);
+    private static final DynamicCallSiteDesc PREDICATE_STRING_STARTS_WITH = DynamicCallSiteDesc.of(METAFACTORY, "test",
+            MethodTypeDesc.of(PREDICATE_DESC, ConstantDescs.CD_String),
             MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object),
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.VIRTUAL, ConstantDescs.CD_String, "startsWith", MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String)),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String));
-    public static final ClassDesc MAP_CLASS = Map.class.describeConstable().orElseThrow();
+            STRING_STARTS_WITH,
+            METHOD_TYPE_PREDICATE);
 
     static byte[] transform(ClassModel classModel) {
 
@@ -79,27 +80,24 @@ class Patches {
     private static void addRenderingHints(MethodBuilder methodBuilder, MethodElement methodElement) {
         // table.put(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
         // table.put(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        if (!(methodElement instanceof CodeModel cm)) {
+        if (!(methodElement instanceof CodeModel)) {
             methodBuilder.with(methodElement);
             return;
         }
 
         methodBuilder.withCode(codeBuilder -> {
+            MethodTypeDesc methodTypeMapPut = MethodTypeDesc.of(ConstantDescs.CD_Object, ConstantDescs.CD_Object, ConstantDescs.CD_Object);
+            ClassDesc renderingHintsDesc = ClassDesc.ofInternalName("java/awt/RenderingHints");
+            ClassDesc renderingHintsKeyDesc = ClassDesc.ofInternalName("java/awt/RenderingHints$Key");
             codeBuilder.aload(0)
-                    .getstatic(ClassDesc.ofInternalName("java/awt/RenderingHints"),
-                            "KEY_ANTIALIASING", ClassDesc.ofDescriptor("Ljava/awt/RenderingHints$Key;"))
-                    .getstatic(ClassDesc.ofInternalName("java/awt/RenderingHints"),
-                            "VALUE_ANTIALIAS_ON", ConstantDescs.CD_Object)
-                    .invokeinterface(MAP_CLASS, "put",
-                            MethodTypeDesc.of(ConstantDescs.CD_Object, ConstantDescs.CD_Object, ConstantDescs.CD_Object))
+                    .getstatic(renderingHintsDesc, "KEY_ANTIALIASING", renderingHintsKeyDesc)
+                    .getstatic(renderingHintsDesc, "VALUE_ANTIALIAS_ON", ConstantDescs.CD_Object)
+                    .invokeInstruction(Opcode.INVOKEVIRTUAL, ConstantDescs.CD_Map, "put", methodTypeMapPut, false)
                     .pop()
                     .aload(0)
-                    .getstatic(ClassDesc.ofInternalName("java/awt/RenderingHints"),
-                            "KEY_TEXT_ANTIALIASING", ClassDesc.ofDescriptor("Ljava/awt/RenderingHints$Key;"))
-                    .getstatic(ClassDesc.ofInternalName("java/awt/RenderingHints"),
-                            "VALUE_TEXT_ANTIALIAS_ON", ConstantDescs.CD_Object)
-                    .invokeinterface(MAP_CLASS, "put",
-                            MethodTypeDesc.of(ConstantDescs.CD_Object, ConstantDescs.CD_Object, ConstantDescs.CD_Object))
+                    .getstatic(renderingHintsDesc, "KEY_TEXT_ANTIALIASING", renderingHintsKeyDesc)
+                    .getstatic(renderingHintsDesc, "VALUE_TEXT_ANTIALIAS_ON", ConstantDescs.CD_Object)
+                    .invokeinterface(ConstantDescs.CD_Map, "put", methodTypeMapPut)
                     .pop()
                     .return_();
         });
@@ -114,34 +112,34 @@ class Patches {
             return;
         }
 
-        methodBuilder.withCode((codeBuilder) -> codeBuilder.aload(1)
-                .areturn());
+        methodBuilder.withCode((codeBuilder) -> codeBuilder.aload(1).areturn());
     }
 
     private static void hideAgentFromCommandLine(MethodBuilder methodBuilder, MethodElement methodElement) {
         // Util.checkMonitorAccess();
-        // var 0 = new ArrayList(jvm.getVmArguments());
-        // 0.removeIf("-javaagent"::startWith);
-        // 0.removeIf("-agentlib"::startWith);
-        // 0.removeIf("-agentpath"::startWith);
-        // return Collections.unmodifiableList(0);
+        // var _1 = new ArrayList(jvm.getVmArguments());
+        // _1.removeIf("-javaagent"::startWith);
+        // _1.removeIf("-agentlib"::startWith);
+        // _1.removeIf("-agentpath"::startWith);
+        // return Collections.unmodifiableList(_1);
         if (!(methodElement instanceof CodeModel)) {
             methodBuilder.with(methodElement);
             return;
         }
 
         ClassDesc arrayListClass = ArrayList.class.describeConstable().orElseThrow();
+        ClassDesc vmManagementDesc = ClassDesc.ofInternalName("sun/management/VMManagement");
         methodBuilder.withCode(codeBuilder ->
-                codeBuilder.invokestatic(ClassDesc.ofInternalName("sun/management/Util"), "checkMonitorAccess", MethodTypeDesc.of(ConstantDescs.CD_void))
+                codeBuilder.invokestatic(ClassDesc.ofInternalName("sun/management/Util"), "checkMonitorAccess", ConstantDescs.MTD_void)
                         .newObjectInstruction(arrayListClass)
                         .dup()
                         .aload(0)
                         .getfield(ClassDesc.ofInternalName("sun/management/RuntimeImpl"),
-                                "jvm", ClassDesc.ofInternalName("sun/management/VMManagement"))
-                        .invokeinterface(ClassDesc.ofInternalName("sun/management/VMManagement"),
-                                "getVmArguments", MethodTypeDesc.of(LIST_CLASS))
+                                "jvm", vmManagementDesc)
+                        .invokeinterface(vmManagementDesc,
+                                "getVmArguments", MethodTypeDesc.of(ConstantDescs.CD_List))
                         .invokespecial(arrayListClass,
-                                "<init>", MethodTypeDesc.of(void.class.describeConstable().orElseThrow(), Collection.class.describeConstable().orElseThrow()))
+                                ConstantDescs.INIT_NAME, MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Collection))
                         .astore(1)
                         .aload(1)
                         .constantInstruction("-javaagent")
@@ -152,16 +150,17 @@ class Patches {
                         .block(Patches::removeIf)
                         .pop()
                         .aload(1)
-                        .invokestatic(Collections.class.describeConstable().orElseThrow(), "unmodifiableList", MethodTypeDesc.of(LIST_CLASS, LIST_CLASS))
+                        .invokestatic(ConstantDescs.CD_Collection, "unmodifiableList", MethodTypeDesc.of(ConstantDescs.CD_List, ConstantDescs.CD_List))
                         .areturn()
         );
     }
 
     private static void removeIf(CodeBuilder.BlockCodeBuilder blockCodeBuilder) {
-        blockCodeBuilder.invokeDynamicInstruction(STRING_STARTS_WITH_PREDICATE)
-                .invokeinterface(LIST_CLASS,
+        blockCodeBuilder
+                .invokeDynamicInstruction(PREDICATE_STRING_STARTS_WITH)
+                .invokeinterface(ConstantDescs.CD_List,
                         "removeIf",
-                        MethodTypeDesc.of(ConstantDescs.CD_boolean, Predicate.class.describeConstable().orElseThrow()));
+                        MethodTypeDesc.of(ConstantDescs.CD_boolean, PREDICATE_DESC));
     }
 
     private static void callSwingUtilities2(MethodBuilder methodBuilder, MethodElement methodElement) {
@@ -169,10 +168,11 @@ class Patches {
             methodBuilder.with(methodElement);
             return;
         }
+
         methodBuilder.transformCode(cm, (codeBuilder, e) ->
                 codeBuilder.iconst_1()
                         .aload(0)
-                        .invokestatic(ClassDesc.ofInternalName("sun/swing/SwingUtilities2"), "putAATextInfo", MethodTypeDesc.ofDescriptor("(ZLjava/util/Map;)V"))
+                        .invokestatic(ClassDesc.ofInternalName("sun/swing/SwingUtilities2"), "putAATextInfo", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_boolean, ConstantDescs.CD_Map))
                         .return_());
     }
 

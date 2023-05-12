@@ -155,8 +155,8 @@ public class Premain {
                         "sun/font/FontDesignMetrics",
                         "javax/swing/text/html/HTMLEditorKit" ->
                         patchClass(className, classfileBuffer, BytecodeModificationType.PATCH);
-                case "com/limagiran/util/JavaScriptSecure",
-                        "com/limagiran/util/MyClassFilter",
+                case "com/limagiran/js/JavaScriptSecure",
+                        "com/limagiran/js/MyClassFilter",
                         "com/limagiran/js/JSUtils",
                         "com/limagiran/holyrics/js/JSLibHolyrics" ->
                         patchClass(className, classfileBuffer, BytecodeModificationType.REMAP);

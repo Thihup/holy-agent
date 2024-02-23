@@ -9,8 +9,8 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>22</maven.compiler.source>
+        <maven.compiler.target>22</maven.compiler.target>
     </properties>
 
     <build>
@@ -22,15 +22,6 @@
                 <version>3.10.1</version>
                 <configuration>
                     <compilerArgs>
-                        <arg>
-                            --add-exports=java.base/jdk.internal.classfile=dev.thihup.holy.agent
-                        </arg>
-                        <arg>
-                            --add-exports=java.base/jdk.internal.classfile.components=dev.thihup.holy.agent
-                        </arg>
-                        <arg>
-                            --add-exports=java.base/jdk.internal.classfile.constantpool=dev.thihup.holy.agent
-                        </arg>
                         <arg>--enable-preview</arg>
                     </compilerArgs>
                 </configuration>

@@ -1,9 +1,9 @@
 package dev.thihup.holy.agent;
 
-import jdk.internal.classfile.*;
+import java.lang.classfile.*;
 
 import java.lang.constant.*;
-import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.*;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.function.Predicate;
@@ -24,55 +24,32 @@ class Patches {
             STRING_STARTS_WITH,
             METHOD_TYPE_PREDICATE);
 
-    static byte[] transform(ClassModel classModel) {
+    static byte[] transform(ClassFile classFile, ClassModel classModel) {
+        return classFile.transform(classModel, (classBuilder, classElement) -> {
 
-        String className = classModel.thisClass().asInternalName();
+            switch (classElement) {
+                // sun/font/FontDesignMetrics::metricsCache
+                case FieldModel fieldModel when fieldModel.fieldName().equalsString("metricsCache") -> classBuilder.transformField(fieldModel, Patches::finalFlagRemover);
 
-        return classModel.transform((classBuilder, classElement) -> {
-            switch (className) {
-                case "sun/font/FontDesignMetrics" -> {
-                    if (classElement instanceof FieldModel fieldModel
-                            && fieldModel.fieldName().equalsString("metricsCache")) {
-                        classBuilder.transformField(fieldModel, Patches::finalFlagRemover);
-                    } else classBuilder.with(classElement);
-                }
-                case "javax/swing/text/html/HTMLEditorKit" -> {
-                    if (classElement instanceof FieldModel fieldModel
-                            && fieldModel.fieldName().equalsString("defaultFactory")) {
-                        classBuilder.transformField(fieldModel, Patches::finalFlagRemover);
-                    } else classBuilder.with(classElement);
+                // javax/swing/text/html/HTMLEditorKit
+                case FieldModel fieldModel when fieldModel.fieldName().equalsString("defaultFactory") -> classBuilder.transformField(fieldModel, Patches::finalFlagRemover);
 
+                // jdk/internal/reflect/Reflection
+                case MethodModel methodModel when methodModel.methodName().equalsString("filterFields") -> classBuilder.transformMethod(methodModel, Patches::returnArgumentWithoutFiltering);
+
+                // com/alee/utils/ProprietaryUtils
+                case MethodModel methodModel when methodModel.methodName().equalsString("setupUIDefaults") -> {
+                    MethodTransform methodTransform = switch (Premain.UI_FIX_TYPE) {
+                        case AA_TEXT_INFO -> Patches::callSwingUtilities2;
+                        case RENDERING_HINTS -> Patches::addRenderingHints;
+                    };
+                    classBuilder.transformMethod(methodModel, methodTransform);
                 }
 
-                case "jdk/internal/reflect/Reflection" -> {
-                    if (classElement instanceof MethodModel methodModel
-                            && methodModel.methodName().equalsString("filterFields")) {
-                        classBuilder.transformMethod(methodModel, Patches::returnArgumentWithoutFiltering);
-                    } else {
-                        classBuilder.with(classElement);
-                    }
-                }
-                case "com/alee/utils/ProprietaryUtils" -> {
-                    if (classElement instanceof MethodModel methodModel
-                            && methodModel.methodName().equalsString("setupUIDefaults")) {
-                        MethodTransform methodTransform = switch (Premain.UI_FIX_TYPE) {
-                            case AA_TEXT_INFO -> Patches::callSwingUtilities2;
-                            case RENDERING_HINTS -> Patches::addRenderingHints;
-                        };
-                        classBuilder.transformMethod(methodModel, methodTransform);
-                    } else {
-                        classBuilder.with(classElement);
-                    }
-                }
-                case "sun/management/RuntimeImpl" -> {
-                    if (classElement instanceof MethodModel methodModel
-                            && methodModel.methodName().equalsString("getInputArguments")) {
-                        classBuilder.transformMethod(methodModel, Patches::hideAgentFromCommandLine);
-                    } else {
-                        classBuilder.with(classElement);
-                    }
-                }
-                default -> throw new IllegalStateException("Unexpected value: " + className);
+                // sun/management/RuntimeImpl
+                case MethodModel methodModel when methodModel.methodName().equalsString("getInputArguments") -> classBuilder.transformMethod(methodModel, Patches::hideAgentFromCommandLine);
+
+                default -> classBuilder.with(classElement);
             }
         });
     }

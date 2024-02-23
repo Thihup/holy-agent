@@ -1,8 +1,8 @@
 package dev.thihup.holy.agent;
 
-import jdk.internal.classfile.ClassModel;
-import jdk.internal.classfile.Classfile;
-import jdk.internal.classfile.components.ClassRemapper;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.components.ClassRemapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -87,11 +87,7 @@ public class Premain {
                 "java.util", Set.of(unnamedModule),
                 "java.lang", Set.of(unnamedModule),
                 "java.lang.reflect", Set.of(unnamedModule),
-                "java.text", Set.of(unnamedModule),
-                "jdk.internal.classfile", Set.of(unnamedModule),
-                "jdk.internal.classfile.components", Set.of(unnamedModule),
-                "jdk.internal.classfile.constantpool", Set.of(unnamedModule)
-        ), instrumentation);
+                "java.text", Set.of(unnamedModule)), instrumentation);
 
         openPackagesForModule("java.desktop", Map.of(
                 "java.awt", Set.of(unnamedModule),
@@ -168,11 +164,12 @@ public class Premain {
                                          BytecodeModificationType changeType) {
             LOGGER.log(Level.DEBUG, "[Holyrics Patcher] Patching " + className);
 
-            ClassModel classModel = Classfile.parse(classfileBuffer);
+            ClassFile classfile = ClassFile.of();
+            ClassModel classModel = classfile.parse(classfileBuffer);
 
             return switch (changeType) {
-                case REMAP -> ClassRemapper.of(RENAMES).remapClass(classModel);
-                case PATCH -> Patches.transform(classModel);
+                case REMAP -> ClassRemapper.of(RENAMES).remapClass(classfile, classModel);
+                case PATCH -> Patches.transform(classfile, classModel);
             };
 
         }

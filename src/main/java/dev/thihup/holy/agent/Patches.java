@@ -1,7 +1,6 @@
 package dev.thihup.holy.agent;
 
 import java.lang.classfile.*;
-
 import java.lang.constant.*;
 import java.lang.invoke.*;
 import java.lang.reflect.Modifier;
@@ -15,18 +14,22 @@ class Patches {
             LambdaMetafactory.class.describeConstable().orElseThrow(), "metafactory",
             ConstantDescs.CD_CallSite,
             ConstantDescs.CD_MethodType, ConstantDescs.CD_MethodHandle, ConstantDescs.CD_MethodType);
-    private static final MethodTypeDesc METHOD_TYPE_PREDICATE = MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String);
-    private static final DirectMethodHandleDesc STRING_STARTS_WITH = MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.VIRTUAL,
-        ConstantDescs.CD_String, "startsWith", METHOD_TYPE_PREDICATE);
-    private static final DynamicCallSiteDesc PREDICATE_STRING_STARTS_WITH = DynamicCallSiteDesc.of(METAFACTORY, "test",
-            MethodTypeDesc.of(PREDICATE_DESC, ConstantDescs.CD_String),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object),
-            STRING_STARTS_WITH,
-            METHOD_TYPE_PREDICATE);
+    
+    private static final DirectMethodHandleDesc STRING_STARTS_WITH = MethodHandleDesc.ofMethod(
+        DirectMethodHandleDesc.Kind.VIRTUAL,
+        ConstantDescs.CD_String, "startsWith", MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String));
+    
+    private static final DynamicCallSiteDesc PREDICATE_STRING_STARTS_WITH = 
+        DynamicCallSiteDesc.of(
+                METAFACTORY, 
+                "test",
+                MethodTypeDesc.of(PREDICATE_DESC, ConstantDescs.CD_String))
+            .withArgs(MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object),
+                STRING_STARTS_WITH,
+                STRING_STARTS_WITH.invocationType());
 
     static byte[] transform(ClassFile classFile, ClassModel classModel) {
         return classFile.transform(classModel, (classBuilder, classElement) -> {
-
             switch (classElement) {
                 // sun/font/FontDesignMetrics::metricsCache
                 case FieldModel fieldModel when fieldModel.fieldName().equalsString("metricsCache") -> classBuilder.transformField(fieldModel, Patches::finalFlagRemover);
@@ -38,45 +41,13 @@ class Patches {
                 case MethodModel methodModel when methodModel.methodName().equalsString("filterFields") -> classBuilder.transformMethod(methodModel, Patches::returnArgumentWithoutFiltering);
 
                 // com/alee/utils/ProprietaryUtils
-                case MethodModel methodModel when methodModel.methodName().equalsString("setupUIDefaults") -> {
-                    MethodTransform methodTransform = switch (Premain.UI_FIX_TYPE) {
-                        case AA_TEXT_INFO -> Patches::callSwingUtilities2;
-                        case RENDERING_HINTS -> Patches::addRenderingHints;
-                    };
-                    classBuilder.transformMethod(methodModel, methodTransform);
-                }
+                case MethodModel methodModel when methodModel.methodName().equalsString("setupUIDefaults") -> classBuilder.transformMethod(methodModel, Patches::callSwingUtilities2);
 
                 // sun/management/RuntimeImpl
                 case MethodModel methodModel when methodModel.methodName().equalsString("getInputArguments") -> classBuilder.transformMethod(methodModel, Patches::hideAgentFromCommandLine);
 
                 default -> classBuilder.with(classElement);
             }
-        });
-    }
-
-    private static void addRenderingHints(MethodBuilder methodBuilder, MethodElement methodElement) {
-        // table.put(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-        // table.put(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        if (!(methodElement instanceof CodeModel)) {
-            methodBuilder.with(methodElement);
-            return;
-        }
-
-        methodBuilder.withCode(codeBuilder -> {
-            MethodTypeDesc methodTypeMapPut = MethodTypeDesc.of(ConstantDescs.CD_Object, ConstantDescs.CD_Object, ConstantDescs.CD_Object);
-            ClassDesc renderingHintsDesc = ClassDesc.ofInternalName("java/awt/RenderingHints");
-            ClassDesc renderingHintsKeyDesc = ClassDesc.ofInternalName("java/awt/RenderingHints$Key");
-            codeBuilder.aload(0)
-                    .getstatic(renderingHintsDesc, "KEY_ANTIALIASING", renderingHintsKeyDesc)
-                    .getstatic(renderingHintsDesc, "VALUE_ANTIALIAS_ON", ConstantDescs.CD_Object)
-                    .invokeInstruction(Opcode.INVOKEVIRTUAL, ConstantDescs.CD_Map, "put", methodTypeMapPut, false)
-                    .pop()
-                    .aload(0)
-                    .getstatic(renderingHintsDesc, "KEY_TEXT_ANTIALIASING", renderingHintsKeyDesc)
-                    .getstatic(renderingHintsDesc, "VALUE_TEXT_ANTIALIAS_ON", ConstantDescs.CD_Object)
-                    .invokeinterface(ConstantDescs.CD_Map, "put", methodTypeMapPut)
-                    .pop()
-                    .return_();
         });
     }
 
@@ -147,11 +118,11 @@ class Patches {
         }
 
         methodBuilder.transformCode(cm, (codeBuilder, e) ->
-                codeBuilder.iconst_1()
-                        .aload(0)
-                        .invokestatic(ClassDesc.ofInternalName("sun/swing/SwingUtilities2"), "putAATextInfo", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_boolean, ConstantDescs.CD_Map))
-                        .return_());
-    }
+                    codeBuilder.iconst_1()
+                            .aload(0)
+                            .invokestatic(ClassDesc.ofInternalName("sun/swing/SwingUtilities2"), "putAATextInfo", MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_boolean, ConstantDescs.CD_Map))
+                            .return_());
+                }
 
     private static FieldBuilder finalFlagRemover(FieldBuilder fieldBuilder, FieldElement fieldElement) {
         return fieldBuilder.with(switch (fieldElement) {

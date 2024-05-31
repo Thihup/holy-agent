@@ -1,6 +1,8 @@
 package dev.thihup.holy.agent;
 
 import java.lang.classfile.*;
+import java.lang.classfile.constantpool.MemberRefEntry;
+import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.constant.*;
 import java.lang.invoke.*;
 import java.lang.reflect.Modifier;
@@ -46,7 +48,29 @@ class Patches {
                 // sun/management/RuntimeImpl
                 case MethodModel methodModel when methodModel.methodName().equalsString("getInputArguments") -> classBuilder.transformMethod(methodModel, Patches::hideAgentFromCommandLine);
 
+                // uk/co/caprica/vlcj/player/NativeString
+                case MethodModel methodModel when methodModel.methodName().equalsString("getNativeString") -> classBuilder.transformMethod(methodModel, Patches::removeDeprecatedCallJNA);
+                case MethodModel methodModel when methodModel.methodName().equalsString("copyNativeString") -> classBuilder.transformMethod(methodModel, Patches::removeDeprecatedCallJNA);
+                case MethodModel methodModel when methodModel.methodName().equalsString("format") -> classBuilder.transformMethod(methodModel, Patches::removeDeprecatedCallJNA);
+
                 default -> classBuilder.with(classElement);
+            }
+        });
+    }
+
+    // https://github.com/caprica/vlcj/commit/66ef1f303b6849fc5e63087bb4a706b320ef056c
+    private static void removeDeprecatedCallJNA(MethodBuilder methodBuilder, MethodElement methodElement) {
+        if (!(methodElement instanceof CodeModel codeModel)) {
+            methodBuilder.with(methodElement);
+            return;
+        }
+        methodBuilder.transformCode(codeModel, (codeBuilder, codeElement) -> {
+            switch (codeElement) {
+                case InvokeInstruction instruction when instruction.name().equalsString("getString") -> {
+                    codeBuilder.pop();
+                    codeBuilder.invokevirtual(ClassDesc.of("com.sun.jna.Pointer"), "getString", MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_long));
+                }
+                default -> codeBuilder.with(codeElement);
             }
         });
     }
@@ -79,7 +103,7 @@ class Patches {
         ClassDesc vmManagementDesc = ClassDesc.ofInternalName("sun/management/VMManagement");
         methodBuilder.withCode(codeBuilder ->
                 codeBuilder.invokestatic(ClassDesc.ofInternalName("sun/management/Util"), "checkMonitorAccess", ConstantDescs.MTD_void)
-                        .newObjectInstruction(arrayListClass)
+                        .new_(arrayListClass)
                         .dup()
                         .aload(0)
                         .getfield(ClassDesc.ofInternalName("sun/management/RuntimeImpl"),
@@ -90,11 +114,11 @@ class Patches {
                                 ConstantDescs.INIT_NAME, MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Collection))
                         .astore(1)
                         .aload(1)
-                        .constantInstruction("-javaagent")
+                        .loadConstant("-javaagent")
                         .block(Patches::removeIf)
-                        .constantInstruction("-agentlib")
+                        .loadConstant("-agentlib")
                         .block(Patches::removeIf)
-                        .constantInstruction("-agentpath")
+                        .loadConstant("-agentpath")
                         .block(Patches::removeIf)
                         .pop()
                         .aload(1)
@@ -105,7 +129,7 @@ class Patches {
 
     private static void removeIf(CodeBuilder.BlockCodeBuilder blockCodeBuilder) {
         blockCodeBuilder
-                .invokeDynamicInstruction(PREDICATE_STRING_STARTS_WITH)
+                .invokedynamic(PREDICATE_STRING_STARTS_WITH)
                 .invokeinterface(ConstantDescs.CD_List,
                         "removeIf",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, PREDICATE_DESC));

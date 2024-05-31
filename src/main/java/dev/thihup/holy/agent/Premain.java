@@ -33,6 +33,7 @@ public class Premain {
         ModuleLayer.boot().findModule(moduleName).ifPresentOrElse(module -> {
             instrumentation.redefineModule(module, Set.of(), Map.of(), packageToModule, Set.of(),
                     Map.of());
+                    module.isN
         }, () -> LOGGER.log(Level.WARNING,
                 "[Holyrics Patcher] Module " + moduleName + " not found"));
     }
@@ -101,6 +102,7 @@ public class Premain {
         openPackagesForModule("javafx.web", Map.of(
                 "com.sun.webkit.dom", Set.of(unnamedModule)
         ), instrumentation);
+
     }
 
     private static class HolyPatcher implements ClassFileTransformer {
@@ -134,7 +136,9 @@ public class Premain {
                         "sun/management/RuntimeImpl",
                         "jdk/internal/reflect/Reflection",
                         "sun/font/FontDesignMetrics",
-                        "javax/swing/text/html/HTMLEditorKit" ->
+                        "javax/swing/text/html/HTMLEditorKit",
+                        "uk/co/caprica/vlcj/player/NativeString",
+                        "uk/co/caprica/vlcj/player/direct/DefaultDirectMediaPlayer" ->
                         patchClass(className, classfileBuffer, BytecodeModificationType.PATCH);
                 case "com/limagiran/js/JavaScriptSecure",
                         "com/limagiran/js/MyClassFilter",

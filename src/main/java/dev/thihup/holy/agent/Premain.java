@@ -54,13 +54,17 @@ public class Premain {
         ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
 
         Module unnamedModule = systemClassLoader.getUnnamedModule();
+        Module xstreamModule = ModuleLayer.boot().findModule("com.thoughtworks.xstream").orElse(unnamedModule);
+        Module weblafModule = ModuleLayer.boot().findModule("com.alee.weblaf").orElse(unnamedModule);
 
-        Set<Module> modules = Set.of(unnamedModule);
+        Set<Module> modules = Set.of(unnamedModule, xstreamModule, weblafModule);
+
         openPackagesForModule("java.base", Map.of(
                 "java.util", modules,
                 "java.lang", modules,
-                "java.lang.reflect", modules,
-                "java.text", modules), instrumentation);
+                "java.lang.reflect", modules
+               ,"java.text", modules
+                ), instrumentation);
 
         openPackagesForModule("java.desktop", Map.of(
                 "java.awt", modules,
@@ -71,8 +75,9 @@ public class Premain {
                 "javax.swing.text", modules,
                 "javax.swing.text.html", modules,
                 "javax.swing.plaf.basic", modules,
-                "sun.swing", modules,
-                "sun.font", modules), instrumentation);
+                "sun.swing", modules
+               ,"sun.font", modules
+                ), instrumentation);
 
         try {
             openPackagesForModule("java.desktop", Map.of("sun.awt.X11", modules),

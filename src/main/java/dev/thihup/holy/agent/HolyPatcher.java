@@ -19,6 +19,8 @@ class HolyPatcher implements ClassFileTransformer {
             ClassDesc.ofInternalName("org/openjdk/nashorn/api/scripting/ScriptObjectMirror"),
             ClassDesc.ofInternalName("jdk/nashorn/api/scripting/ClassFilter"),
             ClassDesc.ofInternalName("org/openjdk/nashorn/api/scripting/ClassFilter"),
+            ClassDesc.ofInternalName("jdk/nashorn/api/scripting/NashornException"),
+            ClassDesc.ofInternalName("org/openjdk/nashorn/api/scripting/NashornException"),
             ClassDesc.ofInternalName("jdk/nashorn/internal/objects/Global"),
             ClassDesc.ofInternalName("org/openjdk/nashorn/internal/objects/Global")
     );
@@ -66,11 +68,11 @@ class HolyPatcher implements ClassFileTransformer {
             case "uk/co/caprica/vlcj/player/direct/DefaultDirectMediaPlayer" ->
                     patchClass(classfileBuffer, matchingMethodName("format", Patches.removeDeprecatedCallJNA()));
 
-            case "com/limagiran/js/JavaScriptSecure",
-                 "com/limagiran/js/MyClassFilter",
-                 "com/limagiran/js/JSUtils",
-                 "com/limagiran/holyrics/js/JSLibHolyrics" -> patchClass(classfileBuffer, CLASS_REMAPPER);
-            default -> null;
+            // Holyrics
+            case String e when e.startsWith("com/limagiran/js/") || e.startsWith("com/limagiran/holyrics/js/") ->
+                 patchClass(classfileBuffer, CLASS_REMAPPER);
+
+            case String _ -> null;
         };
     }
 

@@ -4,6 +4,7 @@ import java.lang.classfile.AccessFlags;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.FieldTransform;
 import java.lang.classfile.MethodTransform;
+import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.constant.*;
 import java.lang.invoke.LambdaMetafactory;
@@ -40,7 +41,7 @@ class Patches {
                 codeBuilder.pop();
                 codeBuilder.invokevirtual(ClassDesc.of("com.sun.jna.Pointer"),
                         "getString", MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_long));
-                        return;
+                return;
             }
             codeBuilder.with(codeElement);
         });
@@ -117,4 +118,21 @@ class Patches {
         });
     }
 
+    public static MethodTransform enableAnyTypePermissionXStream() {
+        return MethodTransform.transformingCode((builder, element) -> {
+            if (element instanceof FieldInstruction fieldInstruction && fieldInstruction.name().equalsString("xStream")) {
+                // xStream.addPermission(AnyTypePermission.ANY);
+                builder.with(fieldInstruction);
+
+                ClassDesc xstreamClass = ClassDesc.of("com.thoughtworks.xstream.XStream");
+                ClassDesc typePermissionClass = ClassDesc.of("com.thoughtworks.xstream.security.TypePermission");
+
+                builder.getstatic(ClassDesc.of("com.alee.utils.XmlUtils"), "xStream", xstreamClass);
+                builder.getstatic(ClassDesc.of("com.thoughtworks.xstream.security.AnyTypePermission"), "ANY", typePermissionClass);
+                builder.invokevirtual(xstreamClass, "addPermission", MethodTypeDesc.of(ConstantDescs.CD_void, typePermissionClass));
+                return;
+            }
+            builder.with(element);
+        });
+    }
 }

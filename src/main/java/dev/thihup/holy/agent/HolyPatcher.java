@@ -65,9 +65,14 @@ class HolyPatcher implements ClassFileTransformer {
                             ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 
         return switch (className) {
+
+            // WebLaf
             case "com/alee/utils/system/JavaVersion" -> loadNewJavaVersionClass(className);
             case "com/alee/utils/ProprietaryUtils" ->
                     patchClass(classfileBuffer, matchingMethodName("setupUIDefaults", Patches.callSwingUtilities2()));
+            case "com/alee/utils/XmlUtils" -> patchClass(classfileBuffer, matchingMethodName("initializeXStream", Patches.enableAnyTypePermissionXStream()));
+
+            // JDK
             case "sun/management/RuntimeImpl" ->
                     patchClass(classfileBuffer, matchingMethodName("getInputArguments", Patches.hideAgentFromCommandLine()));
             case "jdk/internal/reflect/Reflection" ->

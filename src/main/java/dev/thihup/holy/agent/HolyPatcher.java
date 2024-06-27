@@ -6,6 +6,7 @@ import java.lang.classfile.components.ClassRemapper;
 import java.lang.constant.ClassDesc;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+import java.util.List;
 import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
@@ -39,7 +40,19 @@ class HolyPatcher implements ClassFileTransformer {
 
     static ClassTransform matchingMethodName(String methodName, MethodTransform methodTransform) {
         return (builder, element) -> {
-            if (element instanceof MethodModel methodModel && methodModel.methodName().equalsString(methodName)) {
+            if (element instanceof MethodModel methodModel
+                    && methodModel.methodName().equalsString(methodName)) {
+                builder.transformMethod(methodModel, methodTransform);
+                return;
+            }
+            builder.with(element);
+        };
+    }
+
+    static ClassTransform matchingAnyMethodName(List<String> methodName, MethodTransform methodTransform) {
+        return (builder, element) -> {
+            if (element instanceof MethodModel methodModel
+                    && methodName.stream().anyMatch(methodModel.methodName()::equalsString)) {
                 builder.transformMethod(methodModel, methodTransform);
                 return;
             }
@@ -63,8 +76,11 @@ class HolyPatcher implements ClassFileTransformer {
                     patchClass(classfileBuffer, matchingFieldName("metricsCache", Patches.finalFlagRemover()));
             case "javax/swing/text/html/HTMLEditorKit" ->
                     patchClass(classfileBuffer, matchingFieldName("defaultFactory", Patches.finalFlagRemover()));
+
+            // VLCJ
             case "uk/co/caprica/vlcj/player/NativeString" ->
-                    patchClass(classfileBuffer, matchingMethodName("getNativeString", Patches.removeDeprecatedCallJNA()));
+                    patchClass(classfileBuffer,
+                        matchingAnyMethodName(List.of("getNativeString", "copyNativeString"), Patches.removeDeprecatedCallJNA()));
             case "uk/co/caprica/vlcj/player/direct/DefaultDirectMediaPlayer" ->
                     patchClass(classfileBuffer, matchingMethodName("format", Patches.removeDeprecatedCallJNA()));
 
